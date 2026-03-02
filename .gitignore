@@ -21,12 +21,6 @@ env/
 logs/
 *.log
 
-# AI model artifacts
-app/ai/artifacts/*.json
-app/ai/artifacts/*.pkl
-app/ai/artifacts/eval_reports/
-!app/ai/artifacts/.gitkeep
-
 # Data files (large / sensitive)
 data/
 *.csv
