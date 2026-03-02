@@ -45,19 +45,26 @@ class AIConfig:
         2: "High",
         3: "Critical",
     })
-    # Feature columns for the model
+    # Feature configuration (NHAMCS-aligned)
     NUMERICAL_FEATURES: list = field(default_factory=lambda: [
-        "age",
-        "heart_rate",
-        "systolic_bp",
-        "diastolic_bp",
-        "oxygen_saturation",
-        "temperature",
+        "age", "gender",
+        "temperature", "heart_rate", "respiratory_rate",
+        "systolic_bp", "diastolic_bp", "pain_scale",
+        "immediate_triage", "arrival_by_ems",
     ])
-    CATEGORICAL_FEATURES: list = field(default_factory=lambda: [
-        "symptom_category",
-        "has_chronic_condition",
+    CHRONIC_CONDITION_FEATURES: list = field(default_factory=lambda: [
+        "asthma", "cancer", "ckd", "copd", "chf", "cad",
+        "diabetes_type1", "diabetes_type2", "esrd", "htn", "obesity", "osa",
     ])
+    ENGINEERED_FEATURES: list = field(default_factory=lambda: [
+        "shock_index", "mean_arterial_pressure",
+        "tachycardia_flag", "hypotension_flag",
+        "fever_flag", "high_pain_flag",
+        "chronic_burden_score",
+    ])
+    # Data paths
+    NHAMCS_DATA_PATH: str = os.getenv("NHAMCS_DATA_PATH", "app/ai/dataset.csv")
+    NHAMCS_RAW_PATH: str = os.getenv("NHAMCS_RAW_PATH", "app/ai/ed2022.csv")
 
 
 @dataclass(frozen=True)

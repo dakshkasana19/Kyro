@@ -14,12 +14,14 @@ from marshmallow import Schema, fields, validate, EXCLUDE
 # ------------------------------------------------------------------
 
 class VitalsSchema(Schema):
-    """Vital-sign sub-object."""
+    """Vital-sign sub-object (NHAMCS-aligned)."""
     heart_rate = fields.Float(required=True)
     systolic_bp = fields.Float(required=True)
     diastolic_bp = fields.Float(required=True)
-    oxygen_saturation = fields.Float(required=True)
     temperature = fields.Float(required=True)
+    respiratory_rate = fields.Float(load_default=16.0)
+    pain_scale = fields.Float(load_default=0.0)
+    oxygen_saturation = fields.Float(load_default=98.0)
 
 
 class PatientIntakeSchema(Schema):
@@ -33,9 +35,11 @@ class PatientIntakeSchema(Schema):
         required=True,
         validate=validate.OneOf(["male", "female", "other"]),
     )
-    symptoms = fields.List(fields.Dict(), required=True)
+    symptoms = fields.List(fields.Dict(), load_default=[])
     vitals = fields.Nested(VitalsSchema, required=True)
     history = fields.Dict(load_default={})
+    immediate_triage = fields.Integer(load_default=0, validate=validate.OneOf([0, 1]))
+    arrival_by_ems = fields.Integer(load_default=0, validate=validate.OneOf([0, 1]))
 
 
 class PatientResponseSchema(Schema):
