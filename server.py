@@ -178,9 +178,6 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
-
-#micelenious comment 
-
 # ────────────────────────────────────────────────────────────────
 # POST /api/explain — Prediction + SHAP explanation
 # ────────────────────────────────────────────────────────────────
