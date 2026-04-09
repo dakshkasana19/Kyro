@@ -32,11 +32,13 @@ def create_app() -> Flask:
     from app.routes.doctor_routes import doctor_bp
     from app.routes.queue_routes import queue_bp
     from app.routes.health_routes import health_bp
+    from app.routes.auth_routes import auth_bp
 
     app.register_blueprint(patient_bp)
     app.register_blueprint(doctor_bp)
     app.register_blueprint(queue_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(auth_bp)
 
     # ---- Global Error Handlers ----
     @app.errorhandler(KyroError)

@@ -25,6 +25,7 @@ class SupabaseConfig:
     """Supabase connection configuration."""
     URL: str = os.getenv("SUPABASE_URL", "")
     KEY: str = os.getenv("SUPABASE_KEY", "")
+    JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
 
     def validate(self) -> None:
         if not self.URL or not self.KEY:

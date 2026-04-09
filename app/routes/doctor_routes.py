@@ -15,6 +15,7 @@ from app.core.logging import get_logger
 from app.schemas.validation import DoctorCreateSchema
 from app.services.doctor_service import create_doctor, get_doctor, list_doctors
 from app.utils.helpers import build_response
+from app.core.auth import token_required, require_role
 
 logger = get_logger("routes.doctors")
 
@@ -24,6 +25,8 @@ _create_schema = DoctorCreateSchema()
 
 
 @doctor_bp.route("", methods=["POST"])
+@token_required
+@require_role(["Admin"])
 def register_doctor():
     """Register a new doctor."""
     json_data = request.get_json(silent=True)
@@ -41,6 +44,8 @@ def register_doctor():
 
 
 @doctor_bp.route("", methods=["GET"])
+@token_required
+@require_role(["Admin", "Doctor", "Nurse"])
 def get_all_doctors():
     """List all doctors. Use ?available=true to filter."""
     available_only = request.args.get("available", "").lower() == "true"
