@@ -15,7 +15,8 @@ import {
   ChevronRight, 
   Clock, 
   Activity,
-  Heart
+  Heart,
+  ShieldCheck
 } from 'lucide-react'
 
 interface AssignedPatient {
@@ -137,37 +138,69 @@ export default function DoctorDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {data.patients.map((patient) => (
-              <Link key={patient.triage_id} href={`/doctor/patient/${patient.triage_id}`}>
-                <Card className="border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer bg-white h-full relative overflow-hidden">
-                  <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 rounded-full opacity-5 blur-xl ${patient.severity_level === 3 ? 'bg-rose-500' : 'bg-blue-500'}`} />
-                  
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-6">
-                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                        <Stethoscope className="w-6 h-6" />
+              <div key={patient.triage_id} className="group relative">
+                <Link href={`/doctor/patient/${patient.triage_id}`}>
+                  <Card className="border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer bg-white h-full relative overflow-hidden">
+                    <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 rounded-full opacity-5 blur-xl ${patient.severity_level === 3 ? 'bg-rose-500' : 'bg-blue-500'}`} />
+                    
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-6">
+                        <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                          <Stethoscope className="w-6 h-6" />
+                        </div>
+                        <Badge className={`px-2 py-0.5 rounded-lg border shadow-none font-bold ${getSeverityColor(patient.severity_level)}`}>
+                          {patient.severity_label}
+                        </Badge>
                       </div>
-                      <Badge className={`px-2 py-0.5 rounded-lg border shadow-none font-bold ${getSeverityColor(patient.severity_level)}`}>
-                        {patient.severity_label}
-                      </Badge>
-                    </div>
 
-                    <div className="space-y-0.5 mb-6">
-                      <h4 className="text-lg font-black text-slate-900 truncate">{patient.patient_name}</h4>
-                      <p className="text-sm font-medium text-slate-400">{patient.age}y • {patient.gender}</p>
-                    </div>
+                      <div className="space-y-0.5 mb-6">
+                        <h4 className="text-lg font-black text-slate-900 truncate">{patient.patient_name}</h4>
+                        <p className="text-sm font-medium text-slate-400">{patient.age}y • {patient.gender}</p>
+                      </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <Clock className="w-3 h-3" />
-                        {formatDistanceToNow(new Date(patient.created_at), { addSuffix: true })}
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <Clock className="w-3 h-3" />
+                          {formatDistanceToNow(new Date(patient.created_at), { addSuffix: true })}
+                        </div>
+                        <div className="flex items-center gap-1 text-blue-600 font-bold text-sm">
+                          View Analysis <ChevronRight className="w-4 h-4" />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 text-blue-600 font-bold text-sm">
-                        View Analysis <ChevronRight className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
+                
+                {/* Quick Resolve Button */}
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const supabase = require('@/utils/supabase/client').createClient();
+                    const { data: { session } } = await supabase.auth.getSession();
+                    
+                    try {
+                      const res = await fetch(`/api/queue/resolve/${patient.triage_id}`, {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${session?.access_token}`
+                        }
+                      });
+                      if (res.ok) {
+                        const { toast } = require('sonner');
+                        toast.success('Patient Resolved', { description: `${patient.patient_name} has been removed from your list.` });
+                        fetchData();
+                      }
+                    } catch (err) {
+                      console.error('Resolve failed', err);
+                    }
+                  }}
+                  className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white border border-slate-100 shadow-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:scale-110 transition-all z-20 group-hover:opacity-100 md:opacity-0"
+                  title="Mark as Treated"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                </button>
+              </div>
             ))}
           </div>
         )}

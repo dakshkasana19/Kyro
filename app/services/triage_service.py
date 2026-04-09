@@ -18,8 +18,9 @@ from app.core.errors import AssignmentError
 from app.core.logging import get_logger
 from app.db.supabase_manager import insert_row, update_row
 from app.services.doctor_service import get_available_specialist, increment_load, decrement_load
-from app.core.sockets import notify_queue_update
 from app.core.cache import delete
+from app.services.audit_service import log_event, AuditAction
+from app.services.notification_service import process_admission_notifications
 
 logger = get_logger("services.triage")
 
@@ -67,8 +68,28 @@ def run_triage(patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
     # Invalidate queue cache
     delete("queue:current")
 
-    # Notify live clients
+    # Notify live clients & channels
     notify_queue_update()
+    process_admission_notifications(
+        patient_name=patient_data.get("name", "Unknown"),
+        triage_results={
+            "severity_level": severity,
+            "patient_id": patient_id
+        }
+    )
+
+    # Log Audit
+    log_event(
+        actor="SYSTEM",
+        action=AuditAction.TRIAGE_COMPLETED,
+        resource="patient",
+        resource_id=patient_id,
+        metadata={
+            "severity": severity,
+            "label": severity_label,
+            "confidence": round(confidence, 4)
+        }
+    )
 
     # Enrich for response
     triage_log["severity_label"] = severity_label
@@ -101,14 +122,15 @@ def _assign_doctor(severity: int) -> str | None:
     return doctor["id"]
 
 
-def resolve_triage_session(log_id: str) -> Dict[str, Any]:
+def resolve_triage_session(log_id: str, actor: str = "SYSTEM") -> Dict[str, Any]:
     """
     Mark a triage log as resolved and decrement the assigned doctor's load.
     """
     from app.db.supabase_manager import select_by_id
     log = select_by_id(TABLE, log_id)
     if not log:
-        raise NotFoundError(f"Triage log not found: {log_id}")
+        from app.core.errors import DatabaseError
+        raise DatabaseError(f"Triage log not found: {log_id}")
     
     # Mark as resolved
     updated_log = update_row(TABLE, log_id, {"resolved": True})
@@ -122,7 +144,34 @@ def resolve_triage_session(log_id: str) -> Dict[str, Any]:
     delete("queue:current")
     notify_queue_update()
     
+    # Log Audit
+    log_event(
+        actor=actor,
+        action=AuditAction.CASE_RESOLVED,
+        resource="triage_log",
+        resource_id=log_id,
+        metadata={"doctor_id": doctor_id}
+    )
+    
     return updated_log
+
+
+def unassign_doctor_patients(doctor_id: str) -> int:
+    """
+    Mark all un-resolved patients for this doctor as unassigned.
+    Used when a doctor is removed from staff.
+    """
+    from app.db.supabase_manager import select_rows, update_row
+    from app.core.cache import delete
+    logs = select_rows(TABLE, filters={"assigned_doctor_id": doctor_id, "resolved": False})
+    for log in logs:
+        update_row(TABLE, log["id"], {"assigned_doctor_id": None})
+    
+    if logs:
+        delete("queue:current")
+        notify_queue_update()
+        
+    return len(logs)
 
 
 def optimize_assignment() -> None:

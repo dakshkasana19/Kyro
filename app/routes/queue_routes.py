@@ -32,5 +32,7 @@ def fetch_queue():
 @require_role(["Doctor", "Admin"])
 def resolve_session(log_id: str):
     """Mark a triage session as resolved and free the doctor."""
-    result = resolve_triage_session(log_id)
+    from flask import g
+    actor = g.user.get("email", "SYSTEM")
+    result = resolve_triage_session(log_id, actor=actor)
     return build_response(data=result, message="Case resolved.")

@@ -70,6 +70,17 @@ class DoctorCreateSchema(Schema):
     is_available = fields.Boolean(load_default=True)
 
 
+class DoctorUpdateSchema(Schema):
+    """Validates PUT /api/doctors/<id>."""
+    class Meta:
+        unknown = EXCLUDE
+
+    name = fields.String(validate=validate.Length(min=1, max=200))
+    specialization = fields.String(validate=validate.Length(min=1, max=100))
+    max_capacity = fields.Integer(validate=validate.Range(min=1))
+    is_available = fields.Boolean()
+
+
 class DoctorResponseSchema(Schema):
     id = fields.String()
     name = fields.String()

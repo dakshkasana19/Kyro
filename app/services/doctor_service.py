@@ -13,6 +13,7 @@ from app.core.errors import NotFoundError, AssignmentError
 from app.core.logging import get_logger
 from app.core.cache import get_json, set_json, delete
 from app.core.sockets import notify_doctor_update
+from app.services.audit_service import log_event, AuditAction
 
 logger = get_logger("services.doctor")
 
@@ -32,6 +33,15 @@ def create_doctor(data: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("Doctor created: id=%s name=%s spec=%s",
                 doctor["id"], doctor["name"], doctor["specialization"])
     
+    # Log Audit
+    log_event(
+        actor="ADMIN",
+        action=AuditAction.DOCTOR_SYNC,
+        resource="doctor",
+        resource_id=doctor["id"],
+        metadata={"name": doctor["name"], "specialization": doctor["specialization"]}
+    )
+
     # Invalidate list cache
     delete("doctor:list")
     
@@ -62,7 +72,7 @@ def list_doctors(available_only: bool = False) -> List[Dict[str, Any]]:
     return doctors
 
 
-def increment_load(doctor_id: str) -> Dict[str, Any]:
+def increment_load(doctor_id: str, actor: str = "SYSTEM") -> Dict[str, Any]:
     """
     Increment a doctor's current_load by 1.
     If load reaches max_capacity, mark unavailable.
@@ -83,10 +93,19 @@ def increment_load(doctor_id: str) -> Dict[str, Any]:
     # Notify live clients
     notify_doctor_update(updated_doctor)
     
+    # Log Audit
+    log_event(
+        actor=actor,
+        action=AuditAction.LOAD_ADJUSTED,
+        resource="doctor",
+        resource_id=doctor_id,
+        metadata={"previous_load": doctor["current_load"], "new_load": new_load, "direction": "up"}
+    )
+
     return updated_doctor
 
 
-def decrement_load(doctor_id: str) -> Dict[str, Any]:
+def decrement_load(doctor_id: str, actor: str = "SYSTEM") -> Dict[str, Any]:
     """
     Decrement a doctor's current_load by 1.
     If load was at max, mark available again.
@@ -106,7 +125,66 @@ def decrement_load(doctor_id: str) -> Dict[str, Any]:
     delete("doctor:list:False")
     notify_doctor_update(updated_doctor)
     
+    # Log Audit
+    log_event(
+        actor=actor,
+        action=AuditAction.LOAD_ADJUSTED,
+        resource="doctor",
+        resource_id=doctor_id,
+        metadata={"previous_load": doctor["current_load"], "new_load": new_load, "direction": "down"}
+    )
+
     return updated_doctor
+
+
+def update_doctor(doctor_id: str, data: Dict[str, Any], actor: str = "ADMIN") -> Dict[str, Any]:
+    """Update doctor details and notify clients."""
+    doctor = get_doctor(doctor_id)
+    updated_doctor = update_row(TABLE, doctor_id, data)
+    
+    # Invalidate caches
+    delete("doctor:list:True")
+    delete("doctor:list:False")
+    notify_doctor_update(updated_doctor)
+    
+    log_event(
+        actor=actor,
+        action="DOCTOR_UPDATE",
+        resource="doctor",
+        resource_id=doctor_id,
+        metadata={"changes": list(data.keys())}
+    )
+    
+    return updated_doctor
+
+
+def delete_doctor(doctor_id: str, actor: str = "ADMIN") -> bool:
+    """
+    Remove a doctor and unassign their current patients.
+    """
+    doctor = get_doctor(doctor_id)
+    
+    # Unassign active patients back to the pool
+    from app.services.triage_service import unassign_doctor_patients
+    unassign_doctor_patients(doctor_id)
+    
+    # Delete record
+    from app.db.supabase_manager import delete_row
+    delete_row(TABLE, doctor_id)
+    
+    # Finalize
+    delete("doctor:list:True")
+    delete("doctor:list:False")
+    
+    log_event(
+        actor=actor,
+        action="DOCTOR_DELETE",
+        resource="doctor",
+        resource_id=doctor_id,
+        metadata={"name": doctor["name"]}
+    )
+    
+    return True
 
 
 def get_available_specialist(specialization: str | None = None) -> Optional[Dict[str, Any]]:

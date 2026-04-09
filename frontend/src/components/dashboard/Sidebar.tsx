@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, ClipboardList, Settings, LogOut, Activity } from 'lucide-react'
+import { LayoutDashboard, Users, ClipboardList, Settings, LogOut, Activity, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { logout } from '@/app/auth/actions'
@@ -32,7 +32,8 @@ export function Sidebar() {
 
   const dynamicNavItems = [
     ...navItems,
-    ...(role === 'Doctor' ? [{ icon: Stethoscope, label: 'My Patients', href: '/doctor/dashboard' }] : [])
+    ...(role === 'Doctor' ? [{ icon: Stethoscope, label: 'My Patients', href: '/doctor/dashboard' }] : []),
+    ...(role === 'Admin' || role === 'Doctor' ? [{ icon: History, label: 'Audit Trail', href: '/dashboard/audit' }] : [])
   ]
 
   return (
@@ -44,6 +45,10 @@ export function Sidebar() {
         <span className="hidden lg:block text-xl font-bold text-slate-900 tracking-tight">
           Kyro<span className="text-blue-600">Health</span>
         </span>
+        <div className="ml-auto hidden lg:flex items-center gap-2 px-2 py-1 bg-emerald-50 rounded-full border border-emerald-100">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">Live</span>
+        </div>
       </div>
 
       <nav className="flex-1 px-4 space-y-2 w-full">

@@ -7,6 +7,7 @@ Handles user signup and login using Supabase Auth.
 from flask import Blueprint, request, jsonify
 from app.db.supabase_manager import get_client
 from app.core.logging import get_logger
+from app.services.audit_service import log_event, AuditAction
 
 logger = get_logger("auth_routes")
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
@@ -40,6 +41,13 @@ def signup():
         
         if response.user:
             logger.info("User signed up successfully: %s with role: %s", email, role)
+            log_event(
+                actor=email,
+                action=AuditAction.SIGNUP,
+                resource="user",
+                resource_id=response.user.id,
+                metadata={"role": role}
+            )
             return jsonify({
                 "message": "User registered successfully. Please check your email for verification.",
                 "user": {
@@ -78,6 +86,13 @@ def login():
             role = user.user_metadata.get("role") if user.user_metadata else None
             
             logger.info("User logged in successfully: %s", email)
+            log_event(
+                actor=email,
+                action=AuditAction.LOGIN,
+                resource="user",
+                resource_id=user.id,
+                metadata={"role": role}
+            )
             return jsonify({
                 "message": "Login successful",
                 "access_token": response.session.access_token,

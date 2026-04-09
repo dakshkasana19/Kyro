@@ -32,7 +32,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <SocketListener />
-        <Toaster position="top-right" richColors theme="dark" />
+        <Toaster position="top-right" richColors theme="light" />
       </body>
     </html>
   );

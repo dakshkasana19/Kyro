@@ -13,7 +13,13 @@ from flask import Blueprint, request
 from app.core.errors import ValidationError
 from app.core.logging import get_logger
 from app.schemas.validation import DoctorCreateSchema
-from app.services.doctor_service import create_doctor, get_doctor, list_doctors
+from app.services.doctor_service import (
+    create_doctor, 
+    get_doctor, 
+    list_doctors, 
+    update_doctor, 
+    delete_doctor
+)
 from app.utils.helpers import build_response
 from app.core.auth import token_required, require_role
 from app.core.errors import NotFoundError
@@ -23,6 +29,7 @@ logger = get_logger("routes.doctors")
 doctor_bp = Blueprint("doctors", __name__, url_prefix="/api/doctors")
 
 _create_schema = DoctorCreateSchema()
+_update_schema = DoctorUpdateSchema()
 
 
 @doctor_bp.route("", methods=["POST"])
@@ -80,3 +87,32 @@ def get_single_doctor(doctor_id: str):
     """Get a doctor by UUID."""
     doctor = get_doctor(doctor_id)
     return build_response(data=doctor)
+
+
+@doctor_bp.route("/<doctor_id>", methods=["PUT"])
+@token_required
+@require_role(["Admin"])
+def modify_doctor(doctor_id: str):
+    """Update doctor details."""
+    json_data = request.get_json(silent=True)
+    if not json_data:
+        raise ValidationError("Request body must be valid JSON.")
+
+    errors = _update_schema.validate(json_data)
+    if errors:
+        raise ValidationError("Invalid update data.", details=errors)
+
+    validated = _update_schema.load(json_data)
+    actor = getattr(g, "user", {}).get("email", "ADMIN")
+    doctor = update_doctor(doctor_id, validated, actor=actor)
+    return build_response(data=doctor, message="Doctor updated.")
+
+
+@doctor_bp.route("/<doctor_id>", methods=["DELETE"])
+@token_required
+@require_role(["Admin"])
+def remove_doctor(doctor_id: str):
+    """Remove a doctor record."""
+    actor = getattr(g, "user", {}).get("email", "ADMIN")
+    delete_doctor(doctor_id, actor=actor)
+    return build_response(message="Doctor removed successfully.")
