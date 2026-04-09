@@ -36,3 +36,10 @@ docker-compose.override.yml
 dist/
 build/
 *.egg-info/
+
+# Secrets & Keys
+secrets/
+*.key
+*.pem
+.env.*
+! .env.example

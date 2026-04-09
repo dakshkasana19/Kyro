@@ -16,6 +16,7 @@ from app.schemas.validation import DoctorCreateSchema
 from app.services.doctor_service import create_doctor, get_doctor, list_doctors
 from app.utils.helpers import build_response
 from app.core.auth import token_required, require_role
+from app.core.errors import NotFoundError
 
 logger = get_logger("routes.doctors")
 
@@ -51,6 +52,27 @@ def get_all_doctors():
     available_only = request.args.get("available", "").lower() == "true"
     doctors = list_doctors(available_only=available_only)
     return build_response(data=doctors)
+
+
+@doctor_bp.route("/me/patients", methods=["GET"])
+@token_required
+@require_role(["Doctor", "Admin"])
+def get_my_patients():
+    """Return patients assigned to the currently logged in doctor."""
+    user = getattr(request, "user", None)
+    if not user:
+        raise ValidationError("User not authenticated.")
+    
+    # Map Supabase user to Doctor record via email
+    doctor = get_doctor_by_email(user["email"])
+    if not doctor:
+        raise NotFoundError(f"No doctor profile found for email: {user['email']}")
+    
+    patients = list_assigned_patients(doctor["id"])
+    return build_response(data={
+        "doctor": doctor,
+        "patients": patients
+    })
 
 
 @doctor_bp.route("/<doctor_id>", methods=["GET"])

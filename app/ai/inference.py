@@ -9,6 +9,8 @@ Loads the trained XGBoost model and provides:
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -21,6 +23,7 @@ from app.ai.features import build_feature_vector, get_feature_names, ALL_FEATURE
 from app.core.config import settings
 from app.core.errors import AIModelError
 from app.core.logging import get_logger
+from app.core.cache import get_json, set_json
 
 logger = get_logger("ai.inference")
 
@@ -57,6 +60,33 @@ def _get_explainer() -> shap.TreeExplainer:
     return _explainer
 
 
+def _get_cache_key(prefix: str, patient_data: Dict[str, Any]) -> str:
+    """
+    Generate a stable cache key based on critical patient attributes.
+    Focuses on vitals and symptoms as requested.
+    """
+    # Extract only the critical features
+    vitals = patient_data.get("vitals", {})
+    symptoms = patient_data.get("symptoms", [])
+    
+    # Sort symptoms list for consistency
+    sorted_symptoms = sorted(symptoms) if isinstance(symptoms, list) else symptoms
+    
+    # Create a stable payload
+    payload = {
+        "vitals": vitals,
+        "symptoms": sorted_symptoms,
+        "age": patient_data.get("age"),
+        "gender": patient_data.get("gender")
+    }
+    
+    # MD5 hash for a compact, stable key
+    payload_str = json.dumps(payload, sort_keys=True)
+    payload_hash = hashlib.md5(payload_str.encode()).hexdigest()
+    
+    return f"{prefix}:{payload_hash}"
+
+
 def predict_severity(patient_data: Dict[str, Any]) -> Tuple[int, float, np.ndarray]:
     """
     Predict severity for a single patient.
@@ -70,6 +100,13 @@ def predict_severity(patient_data: Dict[str, Any]) -> Tuple[int, float, np.ndarr
     -------
     (severity_level, confidence_score, probabilities)
     """
+    cache_key = _get_cache_key("prediction", patient_data)
+    cached = get_json(cache_key)
+    if cached:
+        logger.info("Cache HIT [AI Prediction] for patient data")
+        # Redis-JSON returns lists, convert probabilities back to numpy if needed
+        return cached["severity"], cached["confidence"], np.array(cached["proba"])
+
     try:
         model = _load_model()
         X = build_feature_vector(patient_data)
@@ -84,6 +121,14 @@ def predict_severity(patient_data: Dict[str, Any]) -> Tuple[int, float, np.ndarr
             confidence,
             proba.round(3).tolist(),
         )
+        
+        # Cache the result
+        set_json(cache_key, {
+            "severity": severity,
+            "confidence": confidence,
+            "proba": proba.tolist()
+        }, ttl=settings.redis.DEFAULT_TTL)
+        
         return severity, confidence, proba
     except AIModelError:
         raise
@@ -102,6 +147,12 @@ def explain_prediction(patient_data: Dict[str, Any]) -> Dict[str, Any]:
                     feature_importance (sorted by |shap_value|),
                     risk_factors (top contributing features).
     """
+    cache_key = _get_cache_key("explanation", patient_data)
+    cached = get_json(cache_key)
+    if cached:
+        logger.info("Cache HIT [AI Explanation] for patient data")
+        return cached
+
     try:
         explainer = _get_explainer()
         X = build_feature_vector(patient_data)
@@ -141,6 +192,10 @@ def explain_prediction(patient_data: Dict[str, Any]) -> Dict[str, Any]:
             ],
             "risk_factors": risk_factors,
         }
+        
+        # Cache the result
+        set_json(cache_key, summary, ttl=settings.redis.DEFAULT_TTL)
+        
         logger.debug("SHAP explanation generated for severity=%d", severity)
         return summary
     except AIModelError:

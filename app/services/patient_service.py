@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from app.db.supabase_manager import insert_row, select_by_id, select_rows
 from app.core.errors import NotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.core.sockets import notify_new_patient
 
 logger = get_logger("services.patient")
 
@@ -33,6 +34,10 @@ def create_patient(data: Dict[str, Any]) -> Dict[str, Any]:
     }
     patient = insert_row(TABLE, payload)
     logger.info("Patient created: id=%s name=%s", patient["id"], patient["name"])
+    
+    # Notify live clients
+    notify_new_patient(patient)
+    
     return patient
 
 

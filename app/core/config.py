@@ -69,6 +69,13 @@ class AIConfig:
 
 
 @dataclass(frozen=True)
+class RedisConfig:
+    """Redis caching configuration."""
+    URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    DEFAULT_TTL: int = int(os.getenv("REDIS_DEFAULT_TTL", "3600"))
+
+
+@dataclass(frozen=True)
 class LogConfig:
     """Logging configuration."""
     LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG")
@@ -82,6 +89,7 @@ class Settings:
         self.flask = FlaskConfig()
         self.supabase = SupabaseConfig()
         self.ai = AIConfig()
+        self.redis = RedisConfig()
         self.log = LogConfig()
 
     def validate(self) -> None:

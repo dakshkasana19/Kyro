@@ -25,5 +25,8 @@ matplotlib==3.9.3
 
 # Production WSGI
 gunicorn==23.0.0
+flask-socketio==5.5.1
+eventlet==0.39.0
+redis==5.2.1
 
 # Logging (stdlib, no extra dep)

@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.cache import get_json, set_json
 from app.db.supabase_manager import select_rows
 
 logger = get_logger("services.queue")
@@ -21,6 +22,11 @@ def get_queue() -> List[Dict[str, Any]]:
 
     Joins triage_logs with patients to build a human-readable queue.
     """
+    cache_key = "queue:current"
+    cached = get_json(cache_key)
+    if cached:
+        return cached
+
     logs = select_rows(
         "triage_logs",
         columns="id, patient_id, severity_level, confidence_score, assigned_doctor_id, created_at",
@@ -54,6 +60,10 @@ def get_queue() -> List[Dict[str, Any]]:
         })
 
     logger.info("Queue fetched: %d items", len(queue))
+    
+    # Store in cache
+    set_json(cache_key, queue, ttl=60) # Short TTL as fallback, will be invalidated explicitly
+    
     return queue
 
 

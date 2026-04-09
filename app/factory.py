@@ -14,6 +14,7 @@ from flask import Flask, jsonify
 from app.core.config import settings
 from app.core.errors import KyroError
 from app.core.logging import setup_logging, get_logger
+from app.core.sockets import socketio
 
 
 def create_app() -> Flask:
@@ -59,5 +60,8 @@ def create_app() -> Flask:
         logger.exception("Unhandled 500 error: %s", error)
         return jsonify({"error": "INTERNAL_ERROR", "message": "An unexpected error occurred."}), 500
 
-    logger.info("Kyro Flask app created successfully")
+    # ---- Initialise Sockets ----
+    socketio.init_app(app)
+
+    logger.info("Kyro Flask app and SocketIO initialised successfully")
     return app

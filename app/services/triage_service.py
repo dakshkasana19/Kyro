@@ -16,8 +16,10 @@ from app.ai.inference import predict_severity, explain_prediction
 from app.core.config import settings
 from app.core.errors import AssignmentError
 from app.core.logging import get_logger
-from app.db.supabase_manager import insert_row
-from app.services.doctor_service import get_available_specialist, increment_load
+from app.db.supabase_manager import insert_row, update_row
+from app.services.doctor_service import get_available_specialist, increment_load, decrement_load
+from app.core.sockets import notify_queue_update
+from app.core.cache import delete
 
 logger = get_logger("services.triage")
 
@@ -62,6 +64,12 @@ def run_triage(patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
     }
     triage_log = insert_row(TABLE, log_payload)
 
+    # Invalidate queue cache
+    delete("queue:current")
+
+    # Notify live clients
+    notify_queue_update()
+
     # Enrich for response
     triage_log["severity_label"] = severity_label
     return triage_log
@@ -91,6 +99,30 @@ def _assign_doctor(severity: int) -> str | None:
     logger.info("Assigned doctor %s (load→%d) for severity=%d",
                 doctor["id"], doctor["current_load"] + 1, severity)
     return doctor["id"]
+
+
+def resolve_triage_session(log_id: str) -> Dict[str, Any]:
+    """
+    Mark a triage log as resolved and decrement the assigned doctor's load.
+    """
+    from app.db.supabase_manager import select_by_id
+    log = select_by_id(TABLE, log_id)
+    if not log:
+        raise NotFoundError(f"Triage log not found: {log_id}")
+    
+    # Mark as resolved
+    updated_log = update_row(TABLE, log_id, {"resolved": True})
+    
+    # Decrement doctor load if one was assigned
+    doctor_id = log.get("assigned_doctor_id")
+    if doctor_id:
+        decrement_load(doctor_id)
+        
+    # Invalidate cache
+    delete("queue:current")
+    notify_queue_update()
+    
+    return updated_log
 
 
 def optimize_assignment() -> None:
