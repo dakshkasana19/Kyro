@@ -3,12 +3,8 @@ import { updateSession } from '@/utils/supabase/middleware'
 import { createClient } from '@/utils/supabase/server'
 
 export async function middleware(request: NextRequest) {
-  const response = await updateSession(request)
+  const { supabaseResponse, user } = await updateSession(request)
   
-  // Create a server client to check the user
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth')
   const isProtectedPage = 
     request.nextUrl.pathname.startsWith('/intake') || 
@@ -24,7 +20,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {

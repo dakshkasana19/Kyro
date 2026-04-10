@@ -8,17 +8,19 @@ GET   /api/doctors/<id> — Get a single doctor
 
 from __future__ import annotations
 
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 
 from app.core.errors import ValidationError
 from app.core.logging import get_logger
-from app.schemas.validation import DoctorCreateSchema
+from app.schemas.validation import DoctorCreateSchema, DoctorUpdateSchema
 from app.services.doctor_service import (
     create_doctor, 
     get_doctor, 
     list_doctors, 
     update_doctor, 
-    delete_doctor
+    delete_doctor,
+    get_doctor_by_email,
+    list_assigned_patients
 )
 from app.utils.helpers import build_response
 from app.core.auth import token_required, require_role
