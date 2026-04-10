@@ -20,9 +20,10 @@ logger = get_logger("services.doctor")
 TABLE = "doctors"
 
 
-def create_doctor(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Register a new doctor."""
+def create_doctor(hospital_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Register a new doctor scoped to a hospital."""
     payload = {
+        "hospital_id": hospital_id,
         "name": data["name"],
         "specialization": data["specialization"],
         "max_capacity": data.get("max_capacity", 10),
@@ -56,14 +57,17 @@ def get_doctor(doctor_id: str) -> Dict[str, Any]:
     return doctor
 
 
-def list_doctors(available_only: bool = False) -> List[Dict[str, Any]]:
-    """Return all doctors, optionally filtering to available only."""
-    cache_key = f"doctor:list:{available_only}"
+def list_doctors(hospital_id: str, available_only: bool = False) -> List[Dict[str, Any]]:
+    """Return all doctors for a specific hospital, optionally filtering to available only."""
+    cache_key = f"doctor:list:{hospital_id}:{available_only}"
     cached = get_json(cache_key)
     if cached:
         return cached
 
-    filters = {"is_available": True} if available_only else None
+    filters = {"hospital_id": hospital_id}
+    if available_only:
+        filters["is_available"] = True
+        
     doctors = select_rows(TABLE, filters=filters, order_by="current_load")
     
     # Store in cache
@@ -86,12 +90,13 @@ def increment_load(doctor_id: str, actor: str = "SYSTEM") -> Dict[str, Any]:
     
     updated_doctor = update_row(TABLE, doctor_id, updates)
     
-    # Invalidate list caches (both versions)
-    delete("doctor:list:True")
-    delete("doctor:list:False")
+    # Invalidate list caches (both versions) for the hospital
+    hospital_id = doctor["hospital_id"]
+    delete(f"doctor:list:{hospital_id}:True")
+    delete(f"doctor:list:{hospital_id}:False")
 
-    # Notify live clients
-    notify_doctor_update(updated_doctor)
+    # Notify live clients with hospital scope
+    notify_doctor_update(hospital_id, updated_doctor)
     
     # Log Audit
     log_event(
@@ -121,9 +126,10 @@ def decrement_load(doctor_id: str, actor: str = "SYSTEM") -> Dict[str, Any]:
     updated_doctor = update_row(TABLE, doctor_id, updates)
     
     # Invalidate caches
-    delete("doctor:list:True")
-    delete("doctor:list:False")
-    notify_doctor_update(updated_doctor)
+    hospital_id = doctor["hospital_id"]
+    delete(f"doctor:list:{hospital_id}:True")
+    delete(f"doctor:list:{hospital_id}:False")
+    notify_doctor_update(hospital_id, updated_doctor)
     
     # Log Audit
     log_event(
@@ -173,8 +179,9 @@ def delete_doctor(doctor_id: str, actor: str = "ADMIN") -> bool:
     delete_row(TABLE, doctor_id)
     
     # Finalize
-    delete("doctor:list:True")
-    delete("doctor:list:False")
+    hospital_id = doctor["hospital_id"]
+    delete(f"doctor:list:{hospital_id}:True")
+    delete(f"doctor:list:{hospital_id}:False")
     
     log_event(
         actor=actor,
@@ -187,12 +194,12 @@ def delete_doctor(doctor_id: str, actor: str = "ADMIN") -> bool:
     return True
 
 
-def get_available_specialist(specialization: str | None = None) -> Optional[Dict[str, Any]]:
+def get_available_specialist(hospital_id: str, specialization: str | None = None) -> Optional[Dict[str, Any]]:
     """
-    Return the available doctor with the lowest load.
+    Return the available doctor with the lowest load in a specific hospital.
     If specialization is provided, filter by it.
     """
-    doctors = list_doctors(available_only=True)
+    doctors = list_doctors(hospital_id, available_only=True)
     if specialization:
         doctors = [d for d in doctors if d["specialization"].lower() == specialization.lower()]
     if not doctors:

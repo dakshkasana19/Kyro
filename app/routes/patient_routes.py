@@ -8,10 +8,10 @@ GET   /api/patients         — List recent patients
 
 from __future__ import annotations
 
-from flask import Blueprint, request
+from app.core.auth import token_required
+from flask import Blueprint, request, g
 
-from app.core.errors import ValidationError
-from app.core.logging import get_logger
+logger = get_logger("routes.patients")
 from app.schemas.validation import PatientIntakeSchema, PatientResponseSchema
 from app.services.patient_service import create_patient, get_patient, list_patients
 from app.services.triage_service import run_triage
@@ -39,12 +39,15 @@ def intake():
 
     validated = _intake_schema.load(json_data)
 
-    # Persist patient
-    patient = create_patient(validated)
+    # Persist patient - use hospital_id from token if available, else from payload
+    # This allows both public intake (with hospital_id in payload) and staff-entered intake
+    target_hospital_id = getattr(g, "hospital_id", json_data.get("hospital_id", "f47ac10b-58cc-4372-a567-0e02b2c3d479"))
+    
+    patient = create_patient(target_hospital_id, validated)
     logger.info("Intake received for patient %s", patient["id"])
 
     # Run triage pipeline (predict → explain → assign → log)
-    triage_result = run_triage(patient["id"], validated)
+    triage_result = run_triage(target_hospital_id, patient["id"], validated)
 
     return build_response(
         data={
@@ -64,8 +67,9 @@ def get_single_patient(patient_id: str):
 
 
 @patient_bp.route("", methods=["GET"])
+@token_required
 def get_all_patients():
-    """List recent patients."""
+    """List recent patients for the current hospital."""
     limit = request.args.get("limit", 50, type=int)
-    patients = list_patients(limit=limit)
+    patients = list_patients(g.hospital_id, limit=limit)
     return build_response(data=patients)

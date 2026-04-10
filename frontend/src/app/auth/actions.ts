@@ -39,6 +39,7 @@ export async function signup(formData: FormData) {
     options: {
       data: {
         role: role,
+        hospital_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', // Kyro Central Clinic
       },
     },
   })

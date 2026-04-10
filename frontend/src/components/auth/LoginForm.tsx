@@ -61,7 +61,6 @@ export function LoginForm({ message, error }: LoginFormProps) {
               id="email" 
               name="email" 
               type="email" 
-              placeholder="doctor@kyro.health" 
               required 
               className="bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-500 rounded-xl"
             />

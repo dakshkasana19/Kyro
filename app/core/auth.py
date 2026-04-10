@@ -35,6 +35,11 @@ def token_required(f):
                 audience="authenticated"
             )
             g.user = payload
+            # Extract role and hospital_id for easier access in routes
+            user_metadata = payload.get("user_metadata", {})
+            g.hospital_id = user_metadata.get("hospital_id")
+            g.role = user_metadata.get("role")
+            
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "TOKEN_EXPIRED", "message": "Authentication token has expired."}), 401
         except jwt.InvalidTokenError as e:
@@ -53,19 +58,12 @@ def require_role(roles: list[str]):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            # Assumes token_required has already been called and g.user is populated
-            user = getattr(g, "user", None)
-            if not user:
-                return jsonify({"error": "UNAUTHORIZED", "message": "User not authenticated."}), 401
-
-            # Roles are stored in user_metadata or app_metadata
-            # In Supabase, custom roles can be in user_metadata if set during signup
-            user_metadata = user.get("user_metadata", {})
-            user_role = user_metadata.get("role")
-
+            # Assumes token_required has already been called and g.role is populated
+            user_role = getattr(g, "role", None)
+            
             if not user_role or user_role not in roles:
                 logger.warning("Access denied for user %s. Required roles: %s, User role: %s", 
-                               user.get("sub"), roles, user_role)
+                               getattr(g, "user", {}).get("sub"), roles, user_role)
                 return jsonify({"error": "FORBIDDEN", "message": "Access denied. Insufficient permissions."}), 403
 
             return f(*args, **kwargs)

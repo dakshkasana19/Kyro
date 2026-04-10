@@ -21,9 +21,11 @@ queue_bp = Blueprint("queue", __name__, url_prefix="/api/queue")
 
 
 @queue_bp.route("", methods=["GET"])
+@token_required
 def fetch_queue():
-    """Return the current triage queue, ordered by severity."""
-    queue = get_queue()
+    """Return the current triage queue, ordered by severity, for the hospital."""
+    from flask import g
+    queue = get_queue(g.hospital_id)
     return build_response(data=queue)
 
 

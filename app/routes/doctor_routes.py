@@ -48,7 +48,7 @@ def register_doctor():
         raise ValidationError("Invalid doctor data.", details=errors)
 
     validated = _create_schema.load(json_data)
-    doctor = create_doctor(validated)
+    doctor = create_doctor(g.hospital_id, validated)
     logger.info("Doctor registered: %s", doctor["id"])
     return build_response(data=doctor, message="Doctor registered.", status=201)
 
@@ -59,7 +59,7 @@ def register_doctor():
 def get_all_doctors():
     """List all doctors. Use ?available=true to filter."""
     available_only = request.args.get("available", "").lower() == "true"
-    doctors = list_doctors(available_only=available_only)
+    doctors = list_doctors(g.hospital_id, available_only=available_only)
     return build_response(data=doctors)
 
 

@@ -16,13 +16,11 @@ from app.db.supabase_manager import select_rows
 logger = get_logger("services.queue")
 
 
-def get_queue() -> List[Dict[str, Any]]:
+def get_queue(hospital_id: str) -> List[Dict[str, Any]]:
     """
-    Return the current triage queue ordered by severity (desc) then time.
-
-    Joins triage_logs with patients to build a human-readable queue.
+    Return the current triage queue for a specific hospital, ordered by severity.
     """
-    cache_key = "queue:current"
+    cache_key = f"queue:{hospital_id}"
     cached = get_json(cache_key)
     if cached:
         return cached
@@ -30,22 +28,17 @@ def get_queue() -> List[Dict[str, Any]]:
     logs = select_rows(
         "triage_logs",
         columns="id, patient_id, severity_level, confidence_score, assigned_doctor_id, created_at",
+        filters={"hospital_id": hospital_id},
         order_by="-severity_level",
     )
 
-    # Enrich with patient name (batch lookup)
-    patient_ids = list({log["patient_id"] for log in logs})
-    patients_map: Dict[str, str] = {}
-    if patient_ids:
-        patients = select_rows("patients", columns="id, name")
-        patients_map = {p["id"]: p["name"] for p in patients}
+    # Enrich with patient name
+    patients = select_rows("patients", columns="id, name", filters={"hospital_id": hospital_id})
+    patients_map = {p["id"]: p["name"] for p in patients}
 
     # Enrich with doctor name
-    doctor_ids = list({log["assigned_doctor_id"] for log in logs if log.get("assigned_doctor_id")})
-    doctors_map: Dict[str, str] = {}
-    if doctor_ids:
-        doctors = select_rows("doctors", columns="id, name")
-        doctors_map = {d["id"]: d["name"] for d in doctors}
+    doctors = select_rows("doctors", columns="id, name", filters={"hospital_id": hospital_id})
+    doctors_map = {d["id"]: d["name"] for d in doctors}
 
     queue: List[Dict[str, Any]] = []
     for log in logs:
@@ -59,10 +52,10 @@ def get_queue() -> List[Dict[str, Any]]:
             "created_at": log["created_at"],
         })
 
-    logger.info("Queue fetched: %d items", len(queue))
+    logger.info("Queue fetched for hospital %s: %d items", hospital_id, len(queue))
     
     # Store in cache
-    set_json(cache_key, queue, ttl=60) # Short TTL as fallback, will be invalidated explicitly
+    set_json(cache_key, queue, ttl=300)
     
     return queue
 

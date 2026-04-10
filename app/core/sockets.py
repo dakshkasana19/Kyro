@@ -1,37 +1,31 @@
-"""
-Kyro — Real-time SocketIO Configuration
-
-Handles bi-directional communication for live queue updates and alerts.
-"""
-
-from flask_socketio import SocketIO
+from app.core.realtime import event_bus
 from app.core.logging import get_logger
 
 logger = get_logger("core.sockets")
 
-# Singleton SocketIO instance
-# CORS is set to "*" for development flexibility; restricted in production.
+def notify_new_patient(hospital_id: str, patient_data: dict):
+    """Broadcast a global alert via SSE when a new patient enters the system."""
+    logger.info("Publishing 'patient:new' for hospital %s: %s", hospital_id, patient_data.get("name"))
+    event_bus.publish(hospital_id, "patient:new", patient_data)
+
+def notify_queue_update(hospital_id: str):
+    """Trigger a refresh of the triage queue via SSE for all connected staff."""
+    logger.info("Publishing 'queue:update' for hospital %s", hospital_id)
+    event_bus.publish(hospital_id, "queue:update", {"refresh": True})
+
+def notify_doctor_update(hospital_id: str, doctor_data: dict):
+    """Update doctor load information via SSE in real-time."""
+    logger.info("Publishing 'doctor:update' for hospital %s: %s", hospital_id, doctor_data.get("id"))
+    event_bus.publish(hospital_id, "doctor:update", doctor_data)
+
+# SocketIO logic kept for backward compatibility but effectively silenced for SSE
+from flask_socketio import SocketIO
 socketio = SocketIO(cors_allowed_origins="*", async_mode="eventlet")
-
-def notify_new_patient(patient_data: dict):
-    """Broadcast a global alert when a new patient enters the system."""
-    logger.info("Broadcasting 'patient:new' for %s", patient_data.get("name"))
-    socketio.emit("patient:new", patient_data, broadcast=True)
-
-def notify_queue_update():
-    """Trigger a refresh of the triage queue for all connected staff."""
-    logger.info("Broadcasting 'queue:update'")
-    socketio.emit("queue:update", {"refresh": True}, broadcast=True)
-
-def notify_doctor_update(doctor_data: dict):
-    """Update doctor load information in real-time."""
-    logger.info("Broadcasting 'doctor:update' for %s", doctor_data.get("id"))
-    socketio.emit("doctor:update", doctor_data, broadcast=True)
 
 @socketio.on("connect")
 def handle_connect():
-    logger.debug("Client connected to WebSocket")
+    logger.debug("Client connected to WebSocket (Deprecated)")
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    logger.debug("Client disconnected from WebSocket")
+    logger.debug("Client disconnected from WebSocket (Deprecated)")

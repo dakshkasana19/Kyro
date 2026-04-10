@@ -21,13 +21,21 @@ _client: Optional[Client] = None
 
 
 def get_client() -> Client:
-    """Return the initialised Supabase client (lazy singleton)."""
+    """Return the initialised Supabase admin client (lazy singleton)."""
     global _client
     if _client is None:
         settings.supabase.validate()
         _client = create_client(settings.supabase.URL, settings.supabase.KEY)
-        logger.info("Supabase client initialised for %s", settings.supabase.URL)
+        logger.info("Supabase admin client initialised for %s", settings.supabase.URL)
     return _client
+
+
+def get_user_client(access_token: str) -> Client:
+    """Create and return a Supabase client scoped to a specific user's JWT."""
+    # We create a new client for each request to ensure isolation and RLS adherence.
+    client = create_client(settings.supabase.URL, settings.supabase.KEY)
+    client.postgrest.auth(access_token)
+    return client
 
 
 # ------------------------------------------------------------------

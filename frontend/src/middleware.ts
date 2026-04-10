@@ -12,12 +12,25 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/doctor') ||
     request.nextUrl.pathname === '/'
 
-  if (!user && isProtectedPage) {
-    return NextResponse.redirect(new URL('/auth/login', request.url))
-  }
+  const role = user?.user_metadata?.role
 
-  if (user && isAuthPage) {
-    return NextResponse.redirect(new URL('/', request.url))
+  // --- Role Based Access Control ---
+  if (user) {
+    if (isAuthPage) {
+        return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    const path = request.nextUrl.pathname
+    
+    // Admin only routes
+    if (path.startsWith('/dashboard/admin') && role !== 'Admin') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    // Nurse/Admin only routes for patient intake
+    if (path.startsWith('/intake') && !['Admin', 'Nurse'].includes(role)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   return supabaseResponse

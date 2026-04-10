@@ -27,7 +27,7 @@ logger = get_logger("services.triage")
 TABLE = "triage_logs"
 
 
-def run_triage(patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+def run_triage(hospital_id: str, patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Execute the full triage pipeline for one patient.
 
@@ -56,6 +56,7 @@ def run_triage(patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Step 4 — Persist triage log
     log_payload = {
+        "hospital_id": hospital_id,
         "patient_id": patient_id,
         "severity_level": severity,
         "confidence_score": round(confidence, 4),
@@ -65,12 +66,14 @@ def run_triage(patient_id: str, patient_data: Dict[str, Any]) -> Dict[str, Any]:
     }
     triage_log = insert_row(TABLE, log_payload)
 
-    # Invalidate queue cache
-    delete("queue:current")
+    # Invalidate queue cache (scoped by hospital)
+    delete(f"queue:{hospital_id}")
 
+    from app.core.sockets import notify_queue_update
     # Notify live clients & channels
-    notify_queue_update()
+    notify_queue_update(hospital_id)
     process_admission_notifications(
+        hospital_id=hospital_id,
         patient_name=patient_data.get("name", "Unknown"),
         triage_results={
             "severity_level": severity,
@@ -137,12 +140,14 @@ def resolve_triage_session(log_id: str, actor: str = "SYSTEM") -> Dict[str, Any]
     
     # Decrement doctor load if one was assigned
     doctor_id = log.get("assigned_doctor_id")
+    hospital_id = log.get("hospital_id")
     if doctor_id:
         decrement_load(doctor_id)
         
     # Invalidate cache
-    delete("queue:current")
-    notify_queue_update()
+    delete(f"queue:{hospital_id}")
+    from app.core.sockets import notify_queue_update
+    notify_queue_update(hospital_id)
     
     # Log Audit
     log_event(
