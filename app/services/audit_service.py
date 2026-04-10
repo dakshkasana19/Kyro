@@ -35,6 +35,7 @@ class AuditAction:
     MODEL_RETRAIN_FAILED = "MODEL_RETRAIN_FAILED"
 
 def log_event(
+    hospital_id: str,
     actor: str,
     action: str,
     resource: str,
@@ -42,22 +43,10 @@ def log_event(
     metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Persist an event to the immutable audit trail.
-    
-    Parameters
-    ----------
-    actor : str
-        Email or ID of the user performing the action.
-    action : str
-        Standardized choice from AuditAction.
-    resource : str
-        Type of resource impacted (e.g., 'patient', 'user', 'doctor').
-    resource_id : str, optional
-        UUID of the specific resource.
-    metadata : dict, optional
-        Contextual data for the event (e.g., severity, IP address).
+    Persist an event to the immutable audit trail with hospital scoping.
     """
     payload = {
+        "hospital_id": hospital_id,
         "actor": actor,
         "action": action,
         "resource": resource,
@@ -67,22 +56,22 @@ def log_event(
     
     try:
         record = insert_row(TABLE, payload)
-        logger.info("Audit logged: %s by %s on %s", action, actor, resource)
+        logger.info("Audit logged [%s]: %s by %s on %s", hospital_id, action, actor, resource)
         return record
     except Exception as exc:
-        # We don't want audit failures to crash the main request
         logger.error("Failed to write audit log: %s", exc)
         return {"error": str(exc)}
 
 def list_audit_logs(
+    hospital_id: str,
     action: Optional[str] = None,
     actor: Optional[str] = None,
     limit: int = 50
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve audit logs with optional filters.
+    Retrieve audit logs for a specific hospital with optional filters.
     """
-    filters = {}
+    filters = {"hospital_id": hospital_id}
     if action:
         filters["action"] = action
     if actor:

@@ -37,6 +37,7 @@ def create_app() -> Flask:
     from app.routes.audit_routes import audit_bp
     from app.routes.model_routes import model_bp
     from app.routes.realtime_routes import realtime_bp
+    from app.routes.ai_routes import ai_bp
 
     app.register_blueprint(patient_bp)
     app.register_blueprint(doctor_bp)
@@ -46,6 +47,7 @@ def create_app() -> Flask:
     app.register_blueprint(audit_bp)
     app.register_blueprint(model_bp)
     app.register_blueprint(realtime_bp)
+    app.register_blueprint(ai_bp)
 
     # ---- Global Error Handlers ----
     @app.errorhandler(KyroError)

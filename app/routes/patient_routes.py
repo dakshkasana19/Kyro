@@ -9,15 +9,15 @@ GET   /api/patients         — List recent patients
 from __future__ import annotations
 
 from app.core.auth import token_required
+from app.core.errors import ValidationError
 from flask import Blueprint, request, g
+from app.core.logging import get_logger
 
 logger = get_logger("routes.patients")
 from app.schemas.validation import PatientIntakeSchema, PatientResponseSchema
 from app.services.patient_service import create_patient, get_patient, list_patients
 from app.services.triage_service import run_triage
 from app.utils.helpers import build_response
-
-logger = get_logger("routes.patients")
 
 patient_bp = Blueprint("patients", __name__, url_prefix="/api/patients")
 

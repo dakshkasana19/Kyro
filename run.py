@@ -15,7 +15,7 @@ if __name__ == "__main__":
     socketio.run(
         app,
         host=settings.flask.HOST,
-        port=settings.flask.PORT,
+        port=5001,
         debug=settings.flask.DEBUG,
         use_reloader=settings.flask.DEBUG
     )

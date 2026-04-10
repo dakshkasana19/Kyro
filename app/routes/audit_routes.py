@@ -28,5 +28,6 @@ def fetch_audit_logs():
     except ValueError:
         limit = 50
         
-    logs = list_audit_logs(action=action, actor=actor, limit=limit)
+    from flask import g
+    logs = list_audit_logs(hospital_id=g.hospital_id, action=action, actor=actor, limit=limit)
     return build_response(data=logs)

@@ -106,6 +106,7 @@ def login():
             
             logger.info("User logged in successfully: %s", email)
             log_event(
+                hospital_id=hospital_id,
                 actor=email,
                 action=AuditAction.LOGIN,
                 resource="user",

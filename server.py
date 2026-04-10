@@ -28,8 +28,33 @@ from flask import Flask, jsonify, request
 from app.ai.inference import predict_severity, explain_prediction, reload_model
 from app.ai.features import ALL_FEATURES, CHRONIC_CONDITION_COLS
 from app.core.config import settings
+from app.core.logging import setup_logging
+from flask_cors import CORS
+
+setup_logging()
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = settings.flask.SECRET_KEY
+CORS(app)  # Allow cross-origin requests from the Next.js frontend
+
+# ── Register Multi-Tenant Blueprints ────────────────────────────
+from app.routes.auth_routes import auth_bp
+from app.routes.patient_routes import patient_bp
+from app.routes.doctor_routes import doctor_bp
+from app.routes.queue_routes import queue_bp
+from app.routes.health_routes import health_bp
+from app.routes.audit_routes import audit_bp
+from app.routes.model_routes import model_bp
+from app.routes.realtime_routes import realtime_bp
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(patient_bp)
+app.register_blueprint(doctor_bp)
+app.register_blueprint(queue_bp)
+app.register_blueprint(health_bp)
+app.register_blueprint(audit_bp)
+app.register_blueprint(model_bp)
+app.register_blueprint(realtime_bp)
 
 # Severity label map
 SEVERITY_LABELS = {0: "Low", 1: "Medium", 2: "High", 3: "Critical"}
@@ -322,6 +347,12 @@ def _summarize_batch(results: list) -> dict:
 # ────────────────────────────────────────────────────────────────
 # Error Handlers
 # ────────────────────────────────────────────────────────────────
+from app.core.errors import KyroError
+
+@app.errorhandler(KyroError)
+def handle_kyro_error(error):
+    return jsonify(error.to_dict()), error.status_code
+
 @app.errorhandler(404)
 def not_found(_):
     return jsonify({"error": "Endpoint not found."}), 404
@@ -341,21 +372,25 @@ def internal_error(e):
 # Main
 # ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=" * 55)
-    print("  KYRO TRIAGE-AI — Flask API Server")
-    print("=" * 55)
+    print("=" * 60)
+    print("  KYRO TRIAGE-AI — Unified Flask Server")
+    print("=" * 60)
     print(f"  Model:    {settings.ai.MODEL_PATH}")
     print(f"  Features: {len(ALL_FEATURES)}")
     print(f"  Server:   http://localhost:5000")
     print()
-    print("  Endpoints:")
+    print("  AI Endpoints:")
     print("    POST /api/patients/intake — Full intake + triage")
-    print("    GET  /api/health         — Health check")
     print("    POST /api/predict        — Predict severity")
     print("    POST /api/explain        — Predict + SHAP")
     print("    POST /api/batch-predict  — Batch predictions")
-    print("    GET  /api/model/info     — Model metadata")
-    print("    POST /api/model/reload   — Reload model")
-    print("=" * 55)
+    print()
+    print("  Clinical Portal:")
+    print("    POST /api/v1/auth/login  — Staff login")
+    print("    POST /api/v1/auth/signup — Staff signup")
+    print("    GET  /api/queue          — Triage queue")
+    print("    GET  /api/v1/realtime/stream — SSE stream")
+    print("    GET  /api/v1/audit       — Audit logs")
+    print("=" * 60)
 
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -20,7 +20,7 @@ def notify_doctor_update(hospital_id: str, doctor_data: dict):
 
 # SocketIO logic kept for backward compatibility but effectively silenced for SSE
 from flask_socketio import SocketIO
-socketio = SocketIO(cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(cors_allowed_origins="*", async_mode="threading")
 
 @socketio.on("connect")
 def handle_connect():

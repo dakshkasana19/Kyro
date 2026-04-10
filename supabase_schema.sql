@@ -19,6 +19,29 @@ CREATE TABLE IF NOT EXISTS hospitals (
 COMMENT ON TABLE hospitals IS 'Healthcare facilities (tenants) in the system.';
 
 -- --------------------------------------------------------
+-- MIGRATION: Ensure existing tables have the new columns
+-- Run this BEFORE indexes and RLS policies
+-- --------------------------------------------------------
+ALTER TABLE patients    ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id) ON DELETE CASCADE;
+ALTER TABLE doctors     ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id) ON DELETE CASCADE;
+ALTER TABLE triage_logs ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id) ON DELETE CASCADE;
+
+-- Scoped data: if columns were newly added, we need to link existing data to a default hospital
+-- Seed the hospital first so the constraint doesn't fail
+INSERT INTO hospitals (id, name, address) 
+VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Kyro Central Clinic', '77 Health Ave, Silicon Valley')
+ON CONFLICT (id) DO NOTHING;
+
+UPDATE patients    SET hospital_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479' WHERE hospital_id IS NULL;
+UPDATE doctors     SET hospital_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479' WHERE hospital_id IS NULL;
+UPDATE triage_logs SET hospital_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479' WHERE hospital_id IS NULL;
+
+-- Now set NOT NULL constraint after seeding default values
+ALTER TABLE patients    ALTER COLUMN hospital_id SET NOT NULL;
+ALTER TABLE doctors     ALTER COLUMN hospital_id SET NOT NULL;
+ALTER TABLE triage_logs ALTER COLUMN hospital_id SET NOT NULL;
+
+-- --------------------------------------------------------
 -- PROFILES (RBAC & Tenant Link)
 -- -------------------
 -- Extends auth.users with role and hospital context.
@@ -103,13 +126,17 @@ CREATE INDEX IF NOT EXISTS idx_triage_created_at  ON triage_logs (created_at DES
 CREATE TABLE IF NOT EXISTS audit_log (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     hospital_id UUID        REFERENCES hospitals(id) ON DELETE CASCADE,
-    actor       TEXT        NOT NULL,
-    action      TEXT        NOT NULL,
-    resource    TEXT        NOT NULL,
+    actor       TEXT         NOT NULL,
+    action      TEXT         NOT NULL,
+    resource    TEXT         NOT NULL,
     resource_id UUID,
-    metadata    JSONB       DEFAULT '{}'::jsonb,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    metadata    JSONB        DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+
+-- Ensure hospital_id exists on audit_log too if it was pre-existing
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id) ON DELETE CASCADE;
+UPDATE audit_log SET hospital_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479' WHERE hospital_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_audit_hospital   ON audit_log (hospital_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log (created_at DESC);
@@ -126,35 +153,43 @@ ALTER TABLE doctors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE triage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Users can read all profiles in their hospital, but only update their own.
+-- Profiles: Users can read their own profile and other profiles in the same hospital
+-- IMPORTANT: We use auth.jwt() to avoid infinite recursion (querying profiles from profiles policy)
+DROP POLICY IF EXISTS "Profiles are viewable by same hospital members" ON profiles;
 CREATE POLICY "Profiles are viewable by same hospital members" 
 ON profiles FOR SELECT 
-USING (hospital_id = (SELECT hospital_id FROM profiles WHERE id = auth.uid()));
+USING (hospital_id = (auth.jwt() -> 'user_metadata' ->> 'hospital_id')::uuid);
 
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+CREATE POLICY "Users can insert own profile"
+ON profiles FOR INSERT
+WITH CHECK (id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" 
 ON profiles FOR UPDATE 
 USING (id = auth.uid());
 
--- Scoped access policies for clinical data
+-- Scoped access policies for clinical data (use JWT metadata, not profiles subquery)
+DROP POLICY IF EXISTS "Scoped hospital access: patients" ON patients;
 CREATE POLICY "Scoped hospital access: patients" 
 ON patients FOR ALL 
-USING (hospital_id = (SELECT hospital_id FROM profiles WHERE id = auth.uid()));
+USING (hospital_id = (auth.jwt() -> 'user_metadata' ->> 'hospital_id')::uuid);
 
+DROP POLICY IF EXISTS "Scoped hospital access: doctors" ON doctors;
 CREATE POLICY "Scoped hospital access: doctors" 
 ON doctors FOR ALL 
-USING (hospital_id = (SELECT hospital_id FROM profiles WHERE id = auth.uid()));
+USING (hospital_id = (auth.jwt() -> 'user_metadata' ->> 'hospital_id')::uuid);
 
+DROP POLICY IF EXISTS "Scoped hospital access: triage_logs" ON triage_logs;
 CREATE POLICY "Scoped hospital access: triage_logs" 
 ON triage_logs FOR ALL 
-USING (hospital_id = (SELECT hospital_id FROM profiles WHERE id = auth.uid()));
+USING (hospital_id = (auth.jwt() -> 'user_metadata' ->> 'hospital_id')::uuid);
 
 -- --------------------------------------------------------
 -- SEEDING
 -- --------------------------------------------------------
--- Create initial hospital
-INSERT INTO hospitals (id, name, address) 
-VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Kyro Central Clinic', '77 Health Ave, Silicon Valley')
-ON CONFLICT (id) DO NOTHING;
+-- (Hospital is already seeded above during migration)
 
 -- --------------------------------------------------------
 -- PROFILE AUTOMATION
@@ -173,6 +208,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION handle_new_user();
@@ -188,6 +224,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_profiles_updated_at ON profiles;
 CREATE TRIGGER trg_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_patients_updated_at ON patients;
 CREATE TRIGGER trg_patients_updated_at BEFORE UPDATE ON patients FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_doctors_updated_at ON doctors;
 CREATE TRIGGER trg_doctors_updated_at BEFORE UPDATE ON doctors FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
